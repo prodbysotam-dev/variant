@@ -1,0 +1,71 @@
+# Compile Variant pour Mac sur un Mac de GitHub (pas besoin d'avoir un Mac) :
+# onglet « Actions » du dépôt > « Variant Mac » > Run workflow, puis télécharger « Variant-Mac » en bas de la page.
+name: Variant Mac
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+# un nouvel envoi annule le build Mac en cours (pas de minutes gaspillées)
+concurrency:
+  group: mac
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compiler (Variant + 21 effets, AU + VST3, universel) et lancer les tests
+        run: |
+          chmod +x build_mac.sh "mac/Installer Variant.command"
+          ./build_mac.sh
+
+      - name: Installer comme un utilisateur (depuis le zip, bibliothèque de test rangée ailleurs)
+        run: |
+          mkdir -p /tmp/essai && cd /tmp/essai
+          ditto -x -k "$GITHUB_WORKSPACE/dist/Variant Plugins Mac.zip" .
+          L="Variant Bibliothèque @prodbysotam"
+          mkdir -p "$L/Variant Keys" "$L/Variant Pad"
+          python3 -c "import wave,struct,math;w=wave.open('Variant Bibliothèque @prodbysotam/Variant Keys/Test Key.wav','w');w.setnchannels(1);w.setsampwidth(2);w.setframerate(44100);w.writeframes(b''.join(struct.pack('<h',int(8000*math.sin(i*0.06)*math.exp(-i/30000))) for i in range(88200)));w.close()"
+          cp "$L/Variant Keys/Test Key.wav" "$L/Variant Pad/Test Pad.wav"; touch "$L/.variant-cree"
+          test -x "Variant Plugins Mac/Installer Variant.command"
+          mkdir -p "$HOME/Music/Mes trucs"
+          VARIANT_LIB_DEST="$HOME/Music/Mes trucs" "Variant Plugins Mac/Installer Variant.command" --silent
+          ls ~/Library/Audio/Plug-Ins/Components ~/Library/Audio/Plug-Ins/VST3
+          test -f "$HOME/Music/Mes trucs/$L/Variant Keys/Test Key.wav"
+          test "$(cat ~/Library/Variant/library.txt)" = "$HOME/Music/Mes trucs/$L"
+          test "$(ls ~/Library/Audio/Plug-Ins/Components | grep -c component)" -ge 22
+          test "$(ls ~/Library/Audio/Plug-Ins/VST3 | grep -c vst3)" -ge 22
+
+      - name: Variant retrouve sa bibliothèque où qu'elle soit
+        run: bash tools/test_library_location.sh "$GITHUB_WORKSPACE/dist/VariantTests"
+
+      - name: Vérifier chaque AU comme Logic (auval)
+        run: |
+          killall -9 AudioComponentRegistrar || true
+          sleep 5
+          auval -a | grep -i "Vrnt" | tee /tmp/aus.txt
+          fails=0
+          while read -r type sub man rest; do
+            if auval -v "$type" "$sub" "$man" > /tmp/auval.log 2>&1 && grep -q "AU VALIDATION SUCCEEDED" /tmp/auval.log; then echo "ok   : $type $sub $man"; else echo "ECHEC: $type $sub $man"; tail -30 /tmp/auval.log; fails=$((fails+1)); fi
+          done < /tmp/aus.txt
+          echo "$(wc -l < /tmp/aus.txt) AU testés, $fails échec(s)"
+          test "$(wc -l < /tmp/aus.txt)" -ge 22
+          test $fails -eq 0
+
+      - name: Compatibilité DAW (44,1/48/96 kHz, blocs variables, tempo, automation, état, bypass, export, mono, CPU, fenêtre)
+        run: |
+          cd ~/Library/Audio/Plug-Ins
+          "$GITHUB_WORKSPACE/dist/VariantHostCheck" VST3/*.vst3 Components/*.component | tee /tmp/hostcheck.txt
+          test "${PIPESTATUS[0]}" -eq 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Variant-Mac
+          path: dist/Variant Plugins Mac.zip
+          retention-days: 3
+          compression-level: 0
