@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   mac:
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     timeout-minutes: 340
     steps:
       - uses: actions/checkout@v4
