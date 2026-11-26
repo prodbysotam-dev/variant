@@ -504,7 +504,12 @@ int main()
         i18n::current().store (i18n::EN);
         CHECK (fr ("Son") == "Sound" && fr ("Piano électrique") == "Electric piano", "traduction : anglais");
         i18n::current().store (i18n::DE);
-        CHECK (fr ("Effets") == "Effekte" && fr ("Piano électrique") == "Electric piano", "traduction : allemand + repli anglais");
+        CHECK (fr ("Effets") == "Effekte" && fr ("Piano électrique") == "E-Piano", "traduction : allemand");
+        // texte qui n'existe qu'en anglais (phrases de Kick) : repli sur l'anglais
+        CHECK (fr ("Hein ? Reformule\nGenre « comment exporter en MIDI » ou « à quoi sert le Ratchet »\nOu tape « visite » et je te fais le tour").startsWith ("Huh?"),
+               "traduction : repli anglais");
+        i18n::current().store (i18n::RU);
+        CHECK (fr ("Effets") == juce::String::fromUTF8 ("Эффекты") && fr ("Son") == juce::String::fromUTF8 ("Звук"), "traduction : russe");
         i18n::current().store (i18n::FR);
     }
 
